@@ -1,0 +1,127 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+
+df = pd.read_csv("student_report.csv")
+
+#---- Creating the avg_marks field to calulate the performance category ------------------
+sub_colm = df.filter(like='_marks')
+df["avg_marks"] = sub_colm.mean(axis=1)
+
+#------ Calculating the performance category --------------------------
+performance_conditions = [
+    (df["avg_marks"] > 90),
+    (df["avg_marks"] >=75) & (df["avg_marks"] <90),
+    (df["avg_marks"] >=60) & (df["avg_marks"] < 75)
+]
+
+performane_choice = ["Excellent","Good","Average"]
+
+df["performance_category"]=np.select(performance_conditions, performane_choice, default="poor")
+
+#-------------------- Calculating attendence category ---------------------
+attendance_cond = [
+    (df["attendance"] >= 95),
+    (df["attendance"]) >=94 & (df["attendance"] < 85)
+]
+attendance_ch = ["Excellent", "Good"]
+df["attendance_category"] = np.select(attendance_cond, attendance_ch, default="Needs Improvement")
+
+df["total_marks"]  = df["math_marks"] + df["science_marks"]
+
+# --------------- Writing the created new fields to the csv file ----------------------
+df.to_csv("student_report.csv",index=False)
+
+#print(df)
+
+total_stu    = df["name"].count()                               #df["names"].value_counts()
+#total_marks  = df["math_marks"] + df["science_marks"]
+topper_name  = df.loc[df["total_marks"].idxmax(), ["name","total_marks"]].to_string()
+highest_mark = df["total_marks"].max()
+
+a      = df.sort_values(["math_marks"],ascending=False)             # sorting math marks in dcsn
+a_name = a.iloc[1][["name","math_marks"]].to_string()               # 2nd highest marks in maths
+b      = df.sort_values(["attendance"],ascending=True)              # sorting attendance in ascn
+b_attn = b.iloc[0][["name","attendance"]].to_string()               # lowest attendance 
+c      = df["math_marks"].mean()
+d      = df["total_marks"].describe().to_string()
+
+print(f''' 
+Total Students            : {total_stu}\n
+Topper Name               : {topper_name}\n
+Highest Marks in class    : {highest_mark}\n
+Lowest attendence         : {b_attn}\n
+2nd highest marks in maths: {a_name}\n
+Math marks average        : {c}\n
+Overall Performance       : {d}
+''')
+
+#-------------- Training the ML model ----------------------------------
+
+df["nxt_attend"]   = df.groupby("student_id")["attendance"].shift(-1)
+df["nxt_math_mark"] = df.groupby("student_id")["math_marks"].shift(-1)
+df["nxt_scn_mark"]  = df.groupby("student_id")["science_marks"].shift(-1)
+
+df_clean = df.dropna(subset=["nxt_attend","nxt_math_mark","nxt_scn_mark"])
+
+x = df_clean[["attendance","math_marks","science_marks"]]
+y = df_clean["performance_category"]
+y_nxt = df_clean[["nxt_attend","nxt_math_mark","nxt_scn_mark"]]
+
+le= LabelEncoder()
+y = le.fit_transform(y)
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=20)
+x_train2, x_test2, y_nxt_train, y_nxt_test = train_test_split(x, y_nxt, test_size=0.2, random_state=42)
+
+model = RandomForestClassifier()
+model_1 = RandomForestRegressor()
+
+model.fit(x_train,y_train)
+model_1.fit(x_train2,y_nxt_train)
+
+def student_report(stud_id):
+    id = stud_id
+
+    data = df[df["student_id"] == stud_id]
+
+    if data.empty:
+        return "Student id not found!!!"
+    elif len(data) < 2:
+        return "Insufficient Data."
+    else:
+        latest_data = {
+        "Student name" : f"{data["name"].iloc[-1]}",
+        "latest_attendence" : f"{data["attendance"].iloc[-1]}",
+        "latest_math_marks" : f"{data["math_marks"].iloc[-1]}",
+        "latest_science_marks" : f"{data["science_marks"].iloc[-1]}",
+        "latest_attendance_catg" : f"{data["attendance_category"].iloc[-1]}"
+        }       
+
+        input_data = pd.DataFrame([[
+            latest_data["latest_attendence"],
+            latest_data["latest_math_marks"],
+            latest_data["latest_science_marks"]]],
+            columns=["attendance", "math_marks", "science_marks"])
+        
+        pred_attnd_ctg = model.predict(input_data)
+        attnd_ctg = le.inverse_transform(pred_attnd_ctg)
+
+        pred_attnd = model_1.predict(input_data)
+
+        predicted_data ={
+            "predicted_attendance" : f"{pred_attnd[0][0]:.0f}",
+            "predicted_math_marks" : f"{pred_attnd[0][1]:.0f}",
+            "predicted_science_marks" : f"{pred_attnd[0][2]:.0f}",
+            "predicted_attendance_category" : f"{attnd_ctg}"
+        }
+        #return "Success","latest_data","predicted_data"
+        print(latest_data)
+        print(predicted_data)
+student_report(101)
+        
+
+
