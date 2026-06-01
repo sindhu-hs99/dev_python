@@ -1,0 +1,62 @@
+import tkinter as tk
+from tkinter import messagebox
+import weather_ml # Importing the weather backend ML module
+
+def handle_submit():
+    city = city_textbox.get().strip()
+
+    if not city:
+        messagebox.showwarning("Warning","Please enter the city...")
+    
+    # ----- calling ML function from weather_ml.py ----------
+
+    status, today, tommorow = weather_ml.predict_city_weather(city)
+
+    if status == "City Not Found...":
+        messagebox.showwarning("Warning","City Not Found!!")
+    elif status == "Not enough data for prediction":
+        messagebox.showwarning("warning", "Insufficient Data")
+    elif status == "Success":
+        #Format the ML output to the string 
+        result_message = (
+            f"Weather report for {city.upper()}\n"
+            f"\n{'='*35}\n\n"
+            f"[Today's Latest Data]\n"
+            f"Temperature: {today['temp']}°C\n"
+            f"Humidity   : {today['humidity']}%\n"
+            f"Windspeed  : {today['windspeed']}km/h\n"
+            f"Prediction : {today['prediction']}\n"
+            f"\n[Predicted Tommorow]\n\\n"
+            f"Temperature: {tommorow['temp']}°C\n"
+            f"Humidity   : {tommorow['humidity']}%\n"
+            f"Windspeed  : {tommorow['windspeed']}km/h\n"
+            f"Prediction : {tommorow['prediction']}\n"
+        )
+        messagebox.showinfo("Prediction Result",result_message)
+
+# ------------------- GUI LAYOUT Configuration ----------------------
+root = tk.Tk()
+root.geometry("700x400")
+root.title("Weather Prediction System")
+
+#Title Label
+text_label = tk.Label(root, text = "Weather Forcasting System",font=("Georgia",24))
+text_label.pack(pady=20)
+
+#create a container frame for  the row
+input_frame = tk.Frame(root)
+input_frame.pack(pady=20)
+
+#place city Label inside the frame on the left
+city_label = tk.Label(input_frame, text="CITY :", font=("Arial", 12, "bold"))
+city_label.pack(side="left", padx=5)
+#city_label.pack(padx=20, pady=5,anchor="center" )
+
+city_textbox = tk.Entry(input_frame)
+city_textbox.pack(side="left",padx=5)
+#city_textbox.pack(padx=20, pady=5, anchor="center")
+
+submit_button = tk.Button(root, text = "SUBMIT", font=("Arial", 12, "bold"),bg="#4CAF50", fg="white",command=handle_submit)
+submit_button.pack(padx=35,pady=20,anchor="center")
+
+root.mainloop()
