@@ -124,4 +124,3 @@ def student_report(stud_id):
 student_report(101)
         
 
-
