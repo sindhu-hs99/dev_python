@@ -1,0 +1,177 @@
+# --------------------- GUI -----------------------------
+import tkinter as tk
+from tkinter import messagebox
+import student_ml  
+
+def student_btn():
+    try:
+        id = int(stud_textbox.get())
+    except ValueError:
+        messagebox.showwarning("warning","Please enter the valid numeric number...")
+        return
+
+    if not id:
+        messagebox.showwarning("warning","Please enter the student id")
+
+    status, latest, predict = student_ml.student_report(id)
+
+    if status == "Student id not found":
+        messagebox.showwarning("warning","Student_id not found")
+    elif status == "Insufficient Data.":
+        messagebox.showwarning("warning", "Insufficient Data")
+    elif status == "Success":
+        result_msg =(
+            f"Student report analyzer\n"
+            f"---------------------------------------\n"
+            f"Student Name: {latest["student_name"]}\n"
+            f"Student id  : {latest["student_id"]}\n"
+            f"Attendance  : {latest["Attendance"]}\n"
+            f"Latest_math_marks : {latest["latest_math"]}\n"
+            f"Latest_science_marks : {latest["latest_science"]}\n"
+            f"----------- Predicted Data --------------------\n"
+            f"Predicted math marks : {predict["predicted_math_marks"]}\n"
+            f"Predicted science marks : {predict["predicted_science_marks"]}\n"
+        )
+        messagebox.showinfo("Success",result_msg)
+    
+#---------------------------- GUI Configuration -------------------------------------
+root = tk.Tk()
+root.geometry("700x400")
+root.title("Student Performance Analyzer")
+
+text_label = tk.Label(root, text="Student Performance Analyzer", font=("Times New Roman", 25,"bold"),fg="black")
+text_label.pack(padx=10,pady=20)
+
+#---------------------- Creating a text frame container ---------------------------------
+text_frame = tk.Frame(root)
+text_frame.pack(pady=10)
+
+stud_label = tk.Label(text_frame, text="Student Id", font=("Arial", 18,"bold"),fg="brown")
+stud_label.pack(side="left",padx=5,pady=10)
+
+stud_textbox = tk.Entry(text_frame)
+stud_textbox.pack(side="left",padx=5,pady=10)
+
+submit_btn = tk.Button(root, text="SUBMIT", font=("Arial",20,"bold"), bg="green",fg="white",command=student_btn)
+submit_btn.pack(pady=25,anchor="center")
+
+root.mainloop()
+
+#--------------------------------------------- Backend Python Code ----------------------------------------------
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
+
+df = pd.read_csv("stud_datatset.csv")
+#-------------- Calculating Avg_marks ------------------------
+#slc_column = df.filter(like="_marks")
+slc_column = ["math_marks","science_marks"]
+df["avg_marks"] = df[slc_column].mean(axis=1).round(2)
+
+#-------------- Calculating prfm_category ------------------
+prfm_cond = [
+    (df["avg_marks"] >= 90),
+    (df["avg_marks"] >= 80) & (df["avg_marks"] <= 89),
+    (df["avg_marks"] >= 70) & (df["avg_marks"] <= 79)
+]
+prfm_res = ["Excellent","Good","Average"]
+df["prfm_category"] = np.select(prfm_cond,prfm_res, default="Poor")
+
+#--------------- Calculating attnd_category ---------------------
+attnd_cond = [
+    (df["attendance"]>=95),
+    (df["attendance"]>=85) & (df["attendance"]<=94)
+]
+attnd_res = ["Excellent", "Good"]
+df["attnd_category"] = np.select(attnd_cond, attnd_res, default="Need Improvement")
+
+#------------------ Writing to the CSV file ---------------------
+df["total_marks"] = df["math_marks"] + df["science_marks"]
+df.to_csv("stud_datatset.csv",index=False)
+
+count = df["student_id"].nunique()
+total = df.groupby(["student_id","name"]).sum(numeric_only=True).reset_index()
+
+a = total.sort_values(["total_marks"],ascending=False).reset_index()
+b = total.sort_values(["math_marks"],ascending=False).reset_index()
+c = total.sort_values(["attendance"],ascending=True).reset_index()
+topper = a.iloc[0]
+sec_top = b.iloc[1]
+low_attnd = c.iloc[0]
+
+print(f'''
+Total student count : {count}
+Topper of the class : {topper["name"]} is the topper with marks {topper["total_marks"]} marks.
+Second topper in the maths : {sec_top["name"]} is the 2nd topper in maths with {sec_top["math_marks"]} marks.
+Lowest attendance : {low_attnd["name"]} is having lowest attandance in class {low_attnd["attendance"]}.
+''')
+
+#----------------------- Step 5: Train Model ---------------------------------
+df["nxt_math"] = df.groupby("student_id")["math_marks"].shift(-1)
+df["nxt_science"] = df.groupby("student_id")["science_marks"].shift(-1)
+
+df_clean = df.dropna(subset=["nxt_math","nxt_science"])
+
+x = df_clean[["attendance","math_marks","science_marks"]]
+y = df_clean[["nxt_math","nxt_science"]]
+
+#------------- Train the model
+x_train,x_test, y_train, y_test = train_test_split(x,y, test_size=0.2,random_state=42)
+
+model = RandomForestRegressor(random_state=42)
+model.fit(x_train,y_train)
+
+#----------------------- Step 6: Test Model ----------------------------------
+test_input = pd.DataFrame([[94,91,91]],columns=["attendance","math_marks","science_marks"])
+test_pred = model.predict(test_input)
+
+print(f'''
+-----------------Step 6: Evaluation ------------------------------
+If attendance is 94, estimated maths mark is {test_pred[0][0]:.0f}
+IF attendance is 94, estimated science mark is {test_pred[0][1]:.0f}
+''')
+
+
+# --------------------------- Student Report Function ------------------------------
+def student_report(student_id):
+    id = student_id
+
+    data = df[df["student_id"]==id]
+
+    if data.empty:
+        return "Student id not found",None,None
+    elif len(data) < 2:
+        return "Insufficient Data.",None,None
+    else:
+        latest_data = {
+            "student_name": f"{data["name"].iloc[-1]}",
+            "student_id"  : f"{data["student_id"].iloc[-1]}",
+            "Attendance"  : f"{data["attendance"].iloc[-1]}",
+            "latest_math" : f"{data["math_marks"].iloc[-1]}",
+            "latest_science" : f"{data["science_marks"].iloc[-1]}"
+        }
+
+        input_data = pd.DataFrame([[
+            latest_data["Attendance"],latest_data["latest_math"],latest_data["latest_science"]]],
+                                  columns=["attendance","math_marks","science_marks"])
+        #input_data = pd.DataFrame([[94]],columns=["attendance"])
+        pred_marks = model.predict(input_data)
+
+        predicted_data = {
+            "student_name" : f"{data["name"].iloc[-1]}",
+            "student_id"   : f"{data["student_id"].iloc[-1]}",
+            "predicted_math_marks" : f"{pred_marks[0][0]:.0f}",
+            "predicted_science_marks" : f"{pred_marks[0][1]:.0f}"
+        }
+        print("Latest Data", latest_data)
+        print("Predicted Data", predicted_data)
+        #return "Success", latest_data,predicted_data
+student_report(106)
+
+
+
+
+
