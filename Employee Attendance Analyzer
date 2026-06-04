@@ -1,0 +1,112 @@
+import numpy as np 
+import pandas as pd 
+from datetime import datetime, timedelta 
+
+end_date = datetime.now()
+start_date = end_date - timedelta(days=29)
+dates      = pd.date_range(start = start_date,end= end_date).strftime('%y/%m/%d').tolist()
+
+employees = [
+    (101, "Ravi", "IT"),
+    (102, "Ramu", "Accounting"),
+    (103, "Rama", "HR"),
+    (104, "Sita", "Finance"),
+    (105, "Joey", "Marketing")
+]
+
+dataset_row = []
+np.random.seed(42)
+
+for cal_date in dates:
+    for emp_id, emp_nm, dptm in employees:
+        status = "Present" if np.random.rand()>0.10 else "Absent"
+        dataset_row.append([emp_id,emp_nm,dptm,cal_date,status])
+        
+df_emp = pd.DataFrame(dataset_row, columns=["emp_id","emp_nm","dptm","cal_date","status"])
+
+#-------------------------- Adding more emp details --------------------------
+emp = [(106,"Ross", "design"),
+        (107, "Rachel", "fhasion")]
+
+dataset = []
+for cal_date in dates:
+    for emp_id,emp_nm,dptm in emp:
+        status = "Present" if np.random.rand() > 0.10 else "Absent"
+        dataset.append([emp_id,emp_nm,dptm,cal_date,status])
+        
+df_employee= pd.DataFrame(dataset, columns=["emp_id","emp_nm","dptm","cal_date","status"])
+df_combined = pd.concat([df_emp,df_employee],ignore_index=True)
+
+df_combined.to_csv("student.csv",index=False)
+print("File loaded sucessfully")
+
+
+def add_emp():
+    emp_id = int(input("Enter emp_id: "))
+    emp_nm = input("Enter emp_nm: ")
+    dptm   = input("Enter dptm: ")
+    
+    df = pd.read_csv("student.csv")
+    unique_dates = df["cal_date"].unique().tolist()
+    
+    new_data=[]
+    
+    for cal_date in unique_dates:
+        status = "Present" if np.random.rand()>0.10 else "Absent"
+        new_data.append([emp_id,emp_nm,dptm,cal_date,status])
+    df_employees = pd.DataFrame(new_data, columns=["emp_id","emp_nm","dptm","cal_date","status"])
+    df_combine = pd.concat([df_emp,df_employee,df_employees],ignore_index=True)
+    
+    df_combine.to_csv("student.csv",index=False)
+add_emp()
+
+def remove_emp():
+    emp_id = int(input("Enter the emp_id: "))
+    
+    df = pd.read_csv("student.csv")
+    
+    data = df[df["emp_id"] != emp_id]
+    
+    data.to_csv("student.csv",index=False)
+    print(f"Employee Id {emp_id} is removed successfully from the dataset!!")
+remove_emp()
+
+def update_emp():
+    emp_id = int(input("Enter the emp_id: "))
+    dept   = input("Enter the dept to update: ") 
+    
+    df = pd.read_csv("student.csv")
+    
+    #dept_colmn = data.loc[data["emp_id"].idxmax(), ["dept","emp_id"]].to_string()
+    #df["dept_colmn"] = dept 
+    
+    df.loc[df["emp_id"] == emp_id, df["dptm"]] = dept
+    
+    data.to_csv("student.csv",index=False)
+    print(f"For the emp id {emp_id} updated the dept name from {df["dptm"]} to {dept}")
+update_emp()
+
+while True:
+    print("----------- Employee Attendance System -----------\n")
+    print(f'''
+    1. Add Emp 
+    2. Delete Emp 
+    3. Update Emp details 
+    4. Exit 
+    ''')
+    try:
+        choice = int(input("Enter the choice: "))
+    except ValueError:
+        print("Please enter values only...")
+        
+    if choice==1:
+        add_emp()
+    elif choice ==2:
+        remove_emp()
+    elif choice == 3:
+        update_emp()
+    elif choice == 4:
+        print("Exiting the System....")
+        break
+    else:
+        print("Invalid Choice!!")
