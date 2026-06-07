@@ -1,0 +1,226 @@
+import pandas as pd
+import numpy as np
+import os
+from datetime import datetime, timedelta
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+
+if not os.path.exists("Employee.csv"):
+    end_date   =  datetime.now()
+    start_date = end_date - timedelta(days=29)
+    dates      = pd.date_range(start=start_date, end=end_date).strftime("%Y/%m/%d").to_list()
+
+    employee = [
+        (101, "Ravi", "Accounting"),
+        (102, "Sita", "Finance"),
+        (103, "Joey", "HR"),
+        (104, "Jhon", "cook"),
+        (105, "Rama", "marketing")
+    ]
+
+    dataset_row = []
+    np.random.seed(42)
+
+    for cal_date in dates:
+        for emp_id,emp_name,dept in employee:
+            status = "present" if np.random.rand() > 0.10 else "absent"
+            dataset_row.append([emp_id,emp_name,dept,cal_date,status])
+    df_emp = pd.DataFrame(dataset_row, columns=["emp_id","emp_name","dept","cal_date","status"])
+    df_emp.to_csv("Employee.csv", index=False)
+    print("Data loaded successfully!!!")
+
+def add_emp():
+    emp_id   = int(input("Enter the emp_id: "))
+    emp_name = input("Enter the emp_name: ")
+    dept     = input("Enter the dept: ")
+
+    df = pd.read_csv("Employee.csv")
+    unique_dates = df["cal_date"].unique().tolist()
+
+    emp_row = []
+    for cal_date in unique_dates:
+        status = "present" if np.random.rand() > 0.10 else "absent"
+        emp_row.append([emp_id,emp_name,dept,cal_date,status])
+    df_employees = pd.DataFrame(emp_row, columns=["emp_id","emp_name","dept","cal_date","status"])
+    df_combined = pd.concat([df, df_employees], ignore_index=True)
+    df_combined.to_csv("Employee.csv",index = False)
+    print("Employee details added sucessfully!!!")
+#add_emp()
+
+def remove_emp():
+    emp_id = int(input("Enter the emp_id: "))
+    emp_name = input("Enter the emp_name: ")
+
+    df=pd.read_csv("Employee.csv")
+    data = df[df["emp_id"] != emp_id]
+    data.to_csv("Employee.csv",index=False)
+    print(f"Emp id {emp_id} with name {emp_name} removed from the dataset!!")
+#remove_emp()
+
+def update_emp():
+    emp_id = int(input("Enter the emp_id: "))
+    dept  = input("Enter the dept: ")
+
+    df = pd.read_csv("Employee.csv")
+    df.loc[df["emp_id"] == emp_id, "dept"] = dept       # To update the specific field value
+
+    df.to_csv("Employee.csv", index=False)
+    print(f"dept value for emp_id {emp_id} updated sucessfully to {dept}")
+#update_emp()
+
+def percentage():
+    emp_id = int(input("Enter the emp_id: "))
+
+    df = pd.read_csv("Employee.csv")
+    data = df[df["emp_id"]==emp_id]
+
+    #Calculating attendence percentage
+    present_rows = data.loc[data["status"] == "present"]
+    present_days = len(present_rows)
+
+    tot_working_days = len(data["cal_date"])
+    try:
+        attnd_per = ((present_days/tot_working_days) *100 )
+        print(f"total present days: {present_days} of an empid:{emp_id}")
+        print(f"Attendance percentage of an emp_id {emp_id} : {attnd_per:.2f}")
+    except ZeroDivisionError:
+        print('Employee doesnot exist!!!')
+
+def monthly_report():
+    df=pd.read_csv("Employee.csv")
+    # --- Drop old column if it already exists from a previous run ---
+    if "attnd_prct" in df.columns:
+        df = df.drop(columns=["attnd_prct"])
+
+    # Calculate binary presence row-by-row
+    df["p_rows"] = np.where(df['status']=="present",1,0)     #Syntax: df["column"] = np.where(cond, result, default)
+    
+    df_summary = df.groupby(["emp_id","emp_name"])["p_rows"].mean().reset_index()
+    df_summary["p_rows"] *= 100
+    df_summary = df_summary.rename(columns={"p_rows": "attnd_prct"})
+
+    high_attnd = df_summary["attnd_prct"].idxmax()
+    top_emp_attnd = df_summary.loc[high_attnd]
+
+    low_attnd = df_summary["attnd_prct"].idxmin()
+    low_emp_attnd = df_summary.loc[low_attnd]
+
+    emp_blw_75 = df_summary[df_summary["attnd_prct"] < 75][["emp_id","emp_name","attnd_prct"]]
+
+    print(f'''
+Highest attendance : {top_emp_attnd['attnd_prct']:.2f}% with emp_id: {top_emp_attnd["emp_id"]} and emp_name: {top_emp_attnd["emp_name"]}
+Lowest attendance : {low_emp_attnd['attnd_prct']: .2f}% with emp_id: {low_emp_attnd["emp_id"]} and emp_name: {low_emp_attnd["emp_name"]}
+''')
+    if emp_blw_75.empty:
+        print(f"Perfect!!, No emp are less than 75%")
+    else:
+        print(f'''
+Emp less than 75% attendance : 
+{emp_blw_75}''')
+        
+    df = df.merge(
+        df_summary[["emp_id","attnd_prct"]].round(2),
+        on="emp_id",
+        how="left"
+    )
+    df=df.drop(columns=["p_rows"])
+        
+    df.to_csv("Employee.csv", index=False)
+
+def predict_status():
+    df = pd.read_csv("Employee.csv")
+    df["cal_date"] = pd.to_datetime(df["cal_date"],format="mixed")
+    df["week"] = df["cal_date"].dt.day_name()
+
+    df.to_csv("Employee.csv",index=False)
+    #print(df["week"])
+
+    le_dept = LabelEncoder()
+    le_week = LabelEncoder()
+    le_status = LabelEncoder()
+
+    # Encode columns individually
+    df["dept_encoded"] = le_dept.fit_transform(df["dept"])
+    df["week_encoded"] = le_week.fit_transform(df["week"])
+    df["status_encoded"] = le_status.fit_transform(df["status"])
+
+    # Features and Targets
+    x = df[["dept_encoded","week_encoded","attnd_prct"]]
+    y = df["status_encoded"]
+
+    # train test split
+    x_train, x_test, y_train, y_test = train_test_split(x,y,test_size=0.2, random_state=42)
+
+    model = RandomForestClassifier(random_state=42)
+    model.fit(x_train, y_train)
+    accuracy = model.score(x_test, y_test)
+
+    print(f"Accuracy Score: {accuracy}")
+
+    emp_id = int(input("Enter the Emp_id: "))
+    data = df[df["emp_id"] == emp_id]
+
+    if data.empty:
+        print("Emp id not found")
+    elif len(data) < 2:
+        print("Insufficient Data.")
+    else:
+        latest_data = {
+            "Emp_id"  : f"{data["emp_id"].iloc[-1]}",
+            "Emp_name": f"{data["emp_name"].iloc[-1]}",
+            "Dept"    : f"{data["dept"].iloc[-1]}",
+            "Status"  : f"{data["status"].iloc[-1]}",
+            "Week"    : f"{data["week"].iloc[-1]}",
+            "Attnd_percentage" : f"{data["attnd_prct"].iloc[-1]}"
+        }
+
+    # ---  Convert raw test strings into matching numbers for prediction ---
+        encoded_dept = le_dept.transform([latest_data["Dept"]])[0]
+        encoded_week = le_week.transform([latest_data["Week"]])[0]
+
+    # Build dataframe row matching training features exactly
+        input_data = pd.DataFrame([[encoded_dept, encoded_week,latest_data["Attnd_percentage"]]],
+                                  columns=["dept_encoded","week_encoded","attnd_prct"])
+        prediction = model.predict(input_data)
+        pred_status = le_status.inverse_transform(prediction)[0]
+
+        predicted_data = {
+            "Predicted_status" : f"{pred_status}"
+        }
+
+        print(f'''
+            Latest Data: {latest_data}
+Predicted Status : {predicted_data}
+''')
+
+while True:
+    print("\n--------- Employee Attendance Analyzer ---------------")
+    print(f''' 
+          1. Add emp
+          2. Remove Emp
+          3. Update dept
+          4. Find Percentage
+          5. Monthly report
+          6. Predict status
+          7. Exit
+''')
+    Choice = int(input("Enter your choice: "))
+
+    if Choice == 1:
+        add_emp()
+    elif Choice == 2:
+        remove_emp()
+    elif Choice == 3:
+        update_emp()
+    elif Choice == 4:
+        percentage()
+    elif Choice == 5:
+        monthly_report()
+    elif Choice == 6:
+        predict_status()
+    elif Choice == 7:
+        print("Exiting the system.....")
+        break 
+    else:
+        print("Invalid Choice!!!")
